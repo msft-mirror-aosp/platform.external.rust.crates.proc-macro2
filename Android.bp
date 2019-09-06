@@ -1,0 +1,17 @@
+rust_library_rlib {
+    name: "libproc_macro2",
+    host_supported: true,
+    crate_name: "proc_macro2",
+    srcs: ["src/lib.rs"],
+    rlibs: ["libunicode_xid"],
+    flags: [
+        "--cfg u128",
+        "--cfg use_proc_macro",
+        "--cfg wrap_proc_macro",
+    ],
+    features: [
+        "default",
+        "proc-macro",
+    ],
+    edition: "2015",
+}
