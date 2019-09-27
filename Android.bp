@@ -1,5 +1,6 @@
 rust_library_rlib {
     name: "libproc_macro2",
+    deny_warnings: false,
     host_supported: true,
     crate_name: "proc_macro2",
     srcs: ["src/lib.rs"],
