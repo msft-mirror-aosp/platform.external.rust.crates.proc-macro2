@@ -5,7 +5,6 @@ rust_library_rlib {
     srcs: ["src/lib.rs"],
     rlibs: ["libunicode_xid"],
     flags: [
-        "--cfg u128",
         "--cfg use_proc_macro",
         "--cfg wrap_proc_macro",
     ],
