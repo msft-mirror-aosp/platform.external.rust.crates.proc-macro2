@@ -20,35 +20,16 @@ rust_library_host_rlib {
 }
 
 rust_test_host {
-    name: "proc-macro2_test_src_lib",
-    crate_name: "proc_macro2",
-    srcs: ["src/lib.rs"],
-    relative_install_path: "rust/proc-macro2",
-    edition: "2018",
-    features: [
-        "default",
-        "proc-macro",
-    ],
-    flags: [
-        "--cfg proc_macro_span",
-        "--cfg use_proc_macro",
-        "--cfg wrap_proc_macro",
-    ],
-    rlibs: [
-        "libquote",
-        "libunicode_xid",
-    ],
-}
-
-rust_test_host {
-    name: "proc-macro2_tests_test",
+    name: "proc-macro2_tests",
     crate_name: "proc_macro2",
     srcs: [
         "tests/features.rs",
         "tests/marker.rs",
         "tests/test.rs",
     ],
-    relative_install_path: "rust/proc-macro2",
+    relative_install_path: "proc-macro2_tests",
+    test_suites: ["general-tests"],
+    auto_gen_config: true,
     edition: "2018",
     features: [
         "default",
@@ -61,6 +42,29 @@ rust_test_host {
     ],
     rlibs: [
         "libproc_macro2",
+        "libquote",
+        "libunicode_xid",
+    ],
+}
+
+rust_test_host {
+    name: "proc-macro2_tests_proc_macro2",
+    crate_name: "proc_macro2",
+    srcs: ["src/lib.rs"],
+    relative_install_path: "proc-macro2_tests",
+    test_suites: ["general-tests"],
+    auto_gen_config: true,
+    edition: "2018",
+    features: [
+        "default",
+        "proc-macro",
+    ],
+    flags: [
+        "--cfg proc_macro_span",
+        "--cfg use_proc_macro",
+        "--cfg wrap_proc_macro",
+    ],
+    rlibs: [
         "libquote",
         "libunicode_xid",
     ],
