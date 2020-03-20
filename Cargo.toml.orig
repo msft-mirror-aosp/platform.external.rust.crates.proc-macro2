@@ -1,6 +1,6 @@
 [package]
 name = "proc-macro2"
-version = "1.0.4" # remember to update html_root_url
+version = "1.0.9" # remember to update html_root_url
 authors = ["Alex Crichton <alex@alexcrichton.com>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -14,9 +14,6 @@ A stable implementation of the upcoming new `proc_macro` API. Comes with an
 option, off by default, to also reimplement itself in terms of the upstream
 unstable API.
 """
-
-[lib]
-name = "proc_macro2"
 
 [package.metadata.docs.rs]
 rustc-args = ["--cfg", "procmacro2_semver_exempt"]
@@ -41,6 +38,9 @@ nightly = []
 
 [badges]
 travis-ci = { repository = "alexcrichton/proc-macro2" }
+
+[workspace]
+members = ["benches/bench-libproc-macro"]
 
 [patch.crates-io]
 # Our doc tests depend on quote which depends on proc-macro2. Without this line,
