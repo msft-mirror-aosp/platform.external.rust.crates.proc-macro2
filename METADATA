@@ -1,0 +1,18 @@
+name: "proc-macro2"
+description: "A wrapper around the procedural macro API of the compiler\'s proc_macro crate."
+third_party {
+  url {
+    type: HOMEPAGE
+    value: "https://crates.io/crates/proc-macro2/"
+  }
+  url {
+    type: GIT
+    value: "https://github.com/alexcrichton/proc-macro2"
+  }
+  version: "1.0.9"
+  last_upgrade_date {
+    year: 2020
+    month: 3
+    day: 20
+  }
+}
