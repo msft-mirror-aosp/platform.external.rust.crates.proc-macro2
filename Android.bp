@@ -10,7 +10,6 @@ rust_library_host_rlib {
         "proc-macro",
     ],
     flags: [
-        "--cfg proc_macro_span",
         "--cfg use_proc_macro",
         "--cfg wrap_proc_macro",
     ],
@@ -36,7 +35,6 @@ rust_test_host {
         "proc-macro",
     ],
     flags: [
-        "--cfg proc_macro_span",
         "--cfg use_proc_macro",
         "--cfg wrap_proc_macro",
     ],
@@ -60,7 +58,6 @@ rust_test_host {
         "proc-macro",
     ],
     flags: [
-        "--cfg proc_macro_span",
         "--cfg use_proc_macro",
         "--cfg wrap_proc_macro",
     ],
@@ -69,3 +66,6 @@ rust_test_host {
         "libunicode_xid",
     ],
 }
+
+// dependent_library ["feature_list"]
+//   unicode-xid-0.2.0 "default"
