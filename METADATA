@@ -9,10 +9,10 @@ third_party {
     type: GIT
     value: "https://github.com/alexcrichton/proc-macro2"
   }
-  version: "1.0.9"
+  version: "1.0.10"
   last_upgrade_date {
     year: 2020
     month: 3
-    day: 20
+    day: 30
   }
 }
