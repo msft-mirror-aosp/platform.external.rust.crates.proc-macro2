@@ -10,6 +10,7 @@ third_party {
     value: "https://github.com/alexcrichton/proc-macro2"
   }
   version: "1.0.10"
+  license_type: NOTICE
   last_upgrade_date {
     year: 2020
     month: 3
