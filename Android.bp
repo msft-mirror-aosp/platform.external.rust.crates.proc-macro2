@@ -16,6 +16,7 @@ rust_library_host_rlib {
     rlibs: [
         "libunicode_xid",
     ],
+    compile_multilib: "first", // added
 }
 
 rust_test_host {
