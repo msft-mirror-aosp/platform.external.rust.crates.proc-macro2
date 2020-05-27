@@ -1,3 +1,5 @@
+use crate::parse::{token_stream, Cursor};
+use crate::{Delimiter, Spacing, TokenTree};
 #[cfg(span_locations)]
 use std::cell::RefCell;
 #[cfg(span_locations)]
@@ -10,18 +12,29 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::vec;
-
-use crate::strnom::{block_comment, skip_whitespace, whitespace, word_break, Cursor, PResult};
-use crate::{Delimiter, Punct, Spacing, TokenTree};
 use unicode_xid::UnicodeXID;
 
+/// Force use of proc-macro2's fallback implementation of the API for now, even
+/// if the compiler's implementation is available.
+#[cfg(wrap_proc_macro)]
+pub fn force() {
+    crate::detection::force_fallback();
+}
+
+/// Resume using the compiler's implementation of the proc macro API if it is
+/// available.
+#[cfg(wrap_proc_macro)]
+pub fn unforce() {
+    crate::detection::unforce_fallback();
+}
+
 #[derive(Clone)]
-pub struct TokenStream {
-    inner: Vec<TokenTree>,
+pub(crate) struct TokenStream {
+    pub(crate) inner: Vec<TokenTree>,
 }
 
 #[derive(Debug)]
-pub struct LexError;
+pub(crate) struct LexError;
 
 impl TokenStream {
     pub fn new() -> TokenStream {
@@ -61,10 +74,10 @@ impl FromStr for TokenStream {
 
         match token_stream(cursor) {
             Ok((input, output)) => {
-                if skip_whitespace(input).len() != 0 {
-                    Err(LexError)
-                } else {
+                if input.is_empty() {
                     Ok(output)
+                } else {
+                    Err(LexError)
                 }
             }
             Err(LexError) => Err(LexError),
@@ -180,7 +193,7 @@ impl Extend<TokenStream> for TokenStream {
     }
 }
 
-pub type TokenTreeIter = vec::IntoIter<TokenTree>;
+pub(crate) type TokenTreeIter = vec::IntoIter<TokenTree>;
 
 impl IntoIterator for TokenStream {
     type Item = TokenTree;
@@ -192,7 +205,7 @@ impl IntoIterator for TokenStream {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct SourceFile {
+pub(crate) struct SourceFile {
     path: PathBuf,
 }
 
@@ -218,7 +231,7 @@ impl fmt::Debug for SourceFile {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct LineColumn {
+pub(crate) struct LineColumn {
     pub line: usize,
     pub column: usize,
 }
@@ -343,11 +356,11 @@ impl SourceMap {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Span {
+pub(crate) struct Span {
     #[cfg(span_locations)]
-    lo: u32,
+    pub(crate) lo: u32,
     #[cfg(span_locations)]
-    hi: u32,
+    pub(crate) hi: u32,
 }
 
 impl Span {
@@ -465,14 +478,14 @@ impl fmt::Debug for Span {
     }
 }
 
-pub fn debug_span_field_if_nontrivial(debug: &mut fmt::DebugStruct, span: Span) {
+pub(crate) fn debug_span_field_if_nontrivial(debug: &mut fmt::DebugStruct, span: Span) {
     if cfg!(procmacro2_semver_exempt) {
         debug.field("span", &span);
     }
 }
 
 #[derive(Clone)]
-pub struct Group {
+pub(crate) struct Group {
     delimiter: Delimiter,
     stream: TokenStream,
     span: Span,
@@ -541,7 +554,7 @@ impl fmt::Debug for Group {
 }
 
 #[derive(Clone)]
-pub struct Ident {
+pub(crate) struct Ident {
     sym: String,
     span: Span,
     raw: bool,
@@ -575,14 +588,14 @@ impl Ident {
     }
 }
 
-fn is_ident_start(c: char) -> bool {
+pub(crate) fn is_ident_start(c: char) -> bool {
     ('a' <= c && c <= 'z')
         || ('A' <= c && c <= 'Z')
         || c == '_'
         || (c > '\x7f' && UnicodeXID::is_xid_start(c))
 }
 
-fn is_ident_continue(c: char) -> bool {
+pub(crate) fn is_ident_continue(c: char) -> bool {
     ('a' <= c && c <= 'z')
         || ('A' <= c && c <= 'Z')
         || c == '_'
@@ -671,7 +684,7 @@ impl fmt::Debug for Ident {
 }
 
 #[derive(Clone)]
-pub struct Literal {
+pub(crate) struct Literal {
     text: String,
     span: Span,
 }
@@ -693,7 +706,7 @@ macro_rules! unsuffixed_numbers {
 }
 
 impl Literal {
-    fn _new(text: String) -> Literal {
+    pub(crate) fn _new(text: String) -> Literal {
         Literal {
             text,
             span: Span::call_site(),
@@ -823,636 +836,3 @@ impl fmt::Debug for Literal {
         debug.finish()
     }
 }
-
-fn token_stream(mut input: Cursor) -> PResult<TokenStream> {
-    let mut trees = Vec::new();
-    loop {
-        let input_no_ws = skip_whitespace(input);
-        if input_no_ws.rest.len() == 0 {
-            break;
-        }
-        if let Ok((a, tokens)) = doc_comment(input_no_ws) {
-            input = a;
-            trees.extend(tokens);
-            continue;
-        }
-
-        let (a, tt) = match token_tree(input_no_ws) {
-            Ok(p) => p,
-            Err(_) => break,
-        };
-        trees.push(tt);
-        input = a;
-    }
-    Ok((input, TokenStream { inner: trees }))
-}
-
-#[cfg(not(span_locations))]
-fn spanned<'a, T>(
-    input: Cursor<'a>,
-    f: fn(Cursor<'a>) -> PResult<'a, T>,
-) -> PResult<'a, (T, crate::Span)> {
-    let (a, b) = f(skip_whitespace(input))?;
-    Ok((a, ((b, crate::Span::_new_stable(Span::call_site())))))
-}
-
-#[cfg(span_locations)]
-fn spanned<'a, T>(
-    input: Cursor<'a>,
-    f: fn(Cursor<'a>) -> PResult<'a, T>,
-) -> PResult<'a, (T, crate::Span)> {
-    let input = skip_whitespace(input);
-    let lo = input.off;
-    let (a, b) = f(input)?;
-    let hi = a.off;
-    let span = crate::Span::_new_stable(Span { lo, hi });
-    Ok((a, (b, span)))
-}
-
-fn token_tree(input: Cursor) -> PResult<TokenTree> {
-    let (rest, (mut tt, span)) = spanned(input, token_kind)?;
-    tt.set_span(span);
-    Ok((rest, tt))
-}
-
-named!(token_kind -> TokenTree, alt!(
-    map!(group, |g| TokenTree::Group(crate::Group::_new_stable(g)))
-    |
-    map!(literal, |l| TokenTree::Literal(crate::Literal::_new_stable(l))) // must be before symbol
-    |
-    map!(op, TokenTree::Punct)
-    |
-    symbol_leading_ws
-));
-
-named!(group -> Group, alt!(
-    delimited!(
-        punct!("("),
-        token_stream,
-        punct!(")")
-    ) => { |ts| Group::new(Delimiter::Parenthesis, ts) }
-    |
-    delimited!(
-        punct!("["),
-        token_stream,
-        punct!("]")
-    ) => { |ts| Group::new(Delimiter::Bracket, ts) }
-    |
-    delimited!(
-        punct!("{"),
-        token_stream,
-        punct!("}")
-    ) => { |ts| Group::new(Delimiter::Brace, ts) }
-));
-
-fn symbol_leading_ws(input: Cursor) -> PResult<TokenTree> {
-    symbol(skip_whitespace(input))
-}
-
-fn symbol(input: Cursor) -> PResult<TokenTree> {
-    let raw = input.starts_with("r#");
-    let rest = input.advance((raw as usize) << 1);
-
-    let (rest, sym) = symbol_not_raw(rest)?;
-
-    if !raw {
-        let ident = crate::Ident::new(sym, crate::Span::call_site());
-        return Ok((rest, ident.into()));
-    }
-
-    if sym == "_" {
-        return Err(LexError);
-    }
-
-    let ident = crate::Ident::_new_raw(sym, crate::Span::call_site());
-    Ok((rest, ident.into()))
-}
-
-fn symbol_not_raw(input: Cursor) -> PResult<&str> {
-    let mut chars = input.char_indices();
-
-    match chars.next() {
-        Some((_, ch)) if is_ident_start(ch) => {}
-        _ => return Err(LexError),
-    }
-
-    let mut end = input.len();
-    for (i, ch) in chars {
-        if !is_ident_continue(ch) {
-            end = i;
-            break;
-        }
-    }
-
-    Ok((input.advance(end), &input.rest[..end]))
-}
-
-fn literal(input: Cursor) -> PResult<Literal> {
-    let input_no_ws = skip_whitespace(input);
-
-    match literal_nocapture(input_no_ws) {
-        Ok((a, ())) => {
-            let start = input.len() - input_no_ws.len();
-            let len = input_no_ws.len() - a.len();
-            let end = start + len;
-            Ok((a, Literal::_new(input.rest[start..end].to_string())))
-        }
-        Err(LexError) => Err(LexError),
-    }
-}
-
-named!(literal_nocapture -> (), alt!(
-    string
-    |
-    byte_string
-    |
-    byte
-    |
-    character
-    |
-    float
-    |
-    int
-));
-
-named!(string -> (), alt!(
-    quoted_string
-    |
-    preceded!(
-        punct!("r"),
-        raw_string
-    ) => { |_| () }
-));
-
-named!(quoted_string -> (), do_parse!(
-    punct!("\"") >>
-    cooked_string >>
-    tag!("\"") >>
-    option!(symbol_not_raw) >>
-    (())
-));
-
-fn cooked_string(input: Cursor) -> PResult<()> {
-    let mut chars = input.char_indices().peekable();
-    while let Some((byte_offset, ch)) = chars.next() {
-        match ch {
-            '"' => {
-                return Ok((input.advance(byte_offset), ()));
-            }
-            '\r' => {
-                if let Some((_, '\n')) = chars.next() {
-                    // ...
-                } else {
-                    break;
-                }
-            }
-            '\\' => match chars.next() {
-                Some((_, 'x')) => {
-                    if !backslash_x_char(&mut chars) {
-                        break;
-                    }
-                }
-                Some((_, 'n')) | Some((_, 'r')) | Some((_, 't')) | Some((_, '\\'))
-                | Some((_, '\'')) | Some((_, '"')) | Some((_, '0')) => {}
-                Some((_, 'u')) => {
-                    if !backslash_u(&mut chars) {
-                        break;
-                    }
-                }
-                Some((_, '\n')) | Some((_, '\r')) => {
-                    while let Some(&(_, ch)) = chars.peek() {
-                        if ch.is_whitespace() {
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                }
-                _ => break,
-            },
-            _ch => {}
-        }
-    }
-    Err(LexError)
-}
-
-named!(byte_string -> (), alt!(
-    delimited!(
-        punct!("b\""),
-        cooked_byte_string,
-        tag!("\"")
-    ) => { |_| () }
-    |
-    preceded!(
-        punct!("br"),
-        raw_string
-    ) => { |_| () }
-));
-
-fn cooked_byte_string(mut input: Cursor) -> PResult<()> {
-    let mut bytes = input.bytes().enumerate();
-    'outer: while let Some((offset, b)) = bytes.next() {
-        match b {
-            b'"' => {
-                return Ok((input.advance(offset), ()));
-            }
-            b'\r' => {
-                if let Some((_, b'\n')) = bytes.next() {
-                    // ...
-                } else {
-                    break;
-                }
-            }
-            b'\\' => match bytes.next() {
-                Some((_, b'x')) => {
-                    if !backslash_x_byte(&mut bytes) {
-                        break;
-                    }
-                }
-                Some((_, b'n')) | Some((_, b'r')) | Some((_, b't')) | Some((_, b'\\'))
-                | Some((_, b'0')) | Some((_, b'\'')) | Some((_, b'"')) => {}
-                Some((newline, b'\n')) | Some((newline, b'\r')) => {
-                    let rest = input.advance(newline + 1);
-                    for (offset, ch) in rest.char_indices() {
-                        if !ch.is_whitespace() {
-                            input = rest.advance(offset);
-                            bytes = input.bytes().enumerate();
-                            continue 'outer;
-                        }
-                    }
-                    break;
-                }
-                _ => break,
-            },
-            b if b < 0x80 => {}
-            _ => break,
-        }
-    }
-    Err(LexError)
-}
-
-fn raw_string(input: Cursor) -> PResult<()> {
-    let mut chars = input.char_indices();
-    let mut n = 0;
-    while let Some((byte_offset, ch)) = chars.next() {
-        match ch {
-            '"' => {
-                n = byte_offset;
-                break;
-            }
-            '#' => {}
-            _ => return Err(LexError),
-        }
-    }
-    for (byte_offset, ch) in chars {
-        match ch {
-            '"' if input.advance(byte_offset + 1).starts_with(&input.rest[..n]) => {
-                let rest = input.advance(byte_offset + 1 + n);
-                return Ok((rest, ()));
-            }
-            '\r' => {}
-            _ => {}
-        }
-    }
-    Err(LexError)
-}
-
-named!(byte -> (), do_parse!(
-    punct!("b") >>
-    tag!("'") >>
-    cooked_byte >>
-    tag!("'") >>
-    (())
-));
-
-fn cooked_byte(input: Cursor) -> PResult<()> {
-    let mut bytes = input.bytes().enumerate();
-    let ok = match bytes.next().map(|(_, b)| b) {
-        Some(b'\\') => match bytes.next().map(|(_, b)| b) {
-            Some(b'x') => backslash_x_byte(&mut bytes),
-            Some(b'n') | Some(b'r') | Some(b't') | Some(b'\\') | Some(b'0') | Some(b'\'')
-            | Some(b'"') => true,
-            _ => false,
-        },
-        b => b.is_some(),
-    };
-    if ok {
-        match bytes.next() {
-            Some((offset, _)) => {
-                if input.chars().as_str().is_char_boundary(offset) {
-                    Ok((input.advance(offset), ()))
-                } else {
-                    Err(LexError)
-                }
-            }
-            None => Ok((input.advance(input.len()), ())),
-        }
-    } else {
-        Err(LexError)
-    }
-}
-
-named!(character -> (), do_parse!(
-    punct!("'") >>
-    cooked_char >>
-    tag!("'") >>
-    (())
-));
-
-fn cooked_char(input: Cursor) -> PResult<()> {
-    let mut chars = input.char_indices();
-    let ok = match chars.next().map(|(_, ch)| ch) {
-        Some('\\') => match chars.next().map(|(_, ch)| ch) {
-            Some('x') => backslash_x_char(&mut chars),
-            Some('u') => backslash_u(&mut chars),
-            Some('n') | Some('r') | Some('t') | Some('\\') | Some('0') | Some('\'') | Some('"') => {
-                true
-            }
-            _ => false,
-        },
-        ch => ch.is_some(),
-    };
-    if ok {
-        match chars.next() {
-            Some((idx, _)) => Ok((input.advance(idx), ())),
-            None => Ok((input.advance(input.len()), ())),
-        }
-    } else {
-        Err(LexError)
-    }
-}
-
-macro_rules! next_ch {
-    ($chars:ident @ $pat:pat $(| $rest:pat)*) => {
-        match $chars.next() {
-            Some((_, ch)) => match ch {
-                $pat $(| $rest)*  => ch,
-                _ => return false,
-            },
-            None => return false
-        }
-    };
-}
-
-fn backslash_x_char<I>(chars: &mut I) -> bool
-where
-    I: Iterator<Item = (usize, char)>,
-{
-    next_ch!(chars @ '0'..='7');
-    next_ch!(chars @ '0'..='9' | 'a'..='f' | 'A'..='F');
-    true
-}
-
-fn backslash_x_byte<I>(chars: &mut I) -> bool
-where
-    I: Iterator<Item = (usize, u8)>,
-{
-    next_ch!(chars @ b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F');
-    next_ch!(chars @ b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F');
-    true
-}
-
-fn backslash_u<I>(chars: &mut I) -> bool
-where
-    I: Iterator<Item = (usize, char)>,
-{
-    next_ch!(chars @ '{');
-    next_ch!(chars @ '0'..='9' | 'a'..='f' | 'A'..='F');
-    loop {
-        let c = next_ch!(chars @ '0'..='9' | 'a'..='f' | 'A'..='F' | '_' | '}');
-        if c == '}' {
-            return true;
-        }
-    }
-}
-
-fn float(input: Cursor) -> PResult<()> {
-    let (mut rest, ()) = float_digits(input)?;
-    if let Some(ch) = rest.chars().next() {
-        if is_ident_start(ch) {
-            rest = symbol_not_raw(rest)?.0;
-        }
-    }
-    word_break(rest)
-}
-
-fn float_digits(input: Cursor) -> PResult<()> {
-    let mut chars = input.chars().peekable();
-    match chars.next() {
-        Some(ch) if ch >= '0' && ch <= '9' => {}
-        _ => return Err(LexError),
-    }
-
-    let mut len = 1;
-    let mut has_dot = false;
-    let mut has_exp = false;
-    while let Some(&ch) = chars.peek() {
-        match ch {
-            '0'..='9' | '_' => {
-                chars.next();
-                len += 1;
-            }
-            '.' => {
-                if has_dot {
-                    break;
-                }
-                chars.next();
-                if chars
-                    .peek()
-                    .map(|&ch| ch == '.' || is_ident_start(ch))
-                    .unwrap_or(false)
-                {
-                    return Err(LexError);
-                }
-                len += 1;
-                has_dot = true;
-            }
-            'e' | 'E' => {
-                chars.next();
-                len += 1;
-                has_exp = true;
-                break;
-            }
-            _ => break,
-        }
-    }
-
-    let rest = input.advance(len);
-    if !(has_dot || has_exp || rest.starts_with("f32") || rest.starts_with("f64")) {
-        return Err(LexError);
-    }
-
-    if has_exp {
-        let mut has_exp_value = false;
-        while let Some(&ch) = chars.peek() {
-            match ch {
-                '+' | '-' => {
-                    if has_exp_value {
-                        break;
-                    }
-                    chars.next();
-                    len += 1;
-                }
-                '0'..='9' => {
-                    chars.next();
-                    len += 1;
-                    has_exp_value = true;
-                }
-                '_' => {
-                    chars.next();
-                    len += 1;
-                }
-                _ => break,
-            }
-        }
-        if !has_exp_value {
-            return Err(LexError);
-        }
-    }
-
-    Ok((input.advance(len), ()))
-}
-
-fn int(input: Cursor) -> PResult<()> {
-    let (mut rest, ()) = digits(input)?;
-    if let Some(ch) = rest.chars().next() {
-        if is_ident_start(ch) {
-            rest = symbol_not_raw(rest)?.0;
-        }
-    }
-    word_break(rest)
-}
-
-fn digits(mut input: Cursor) -> PResult<()> {
-    let base = if input.starts_with("0x") {
-        input = input.advance(2);
-        16
-    } else if input.starts_with("0o") {
-        input = input.advance(2);
-        8
-    } else if input.starts_with("0b") {
-        input = input.advance(2);
-        2
-    } else {
-        10
-    };
-
-    let mut len = 0;
-    let mut empty = true;
-    for b in input.bytes() {
-        let digit = match b {
-            b'0'..=b'9' => (b - b'0') as u64,
-            b'a'..=b'f' => 10 + (b - b'a') as u64,
-            b'A'..=b'F' => 10 + (b - b'A') as u64,
-            b'_' => {
-                if empty && base == 10 {
-                    return Err(LexError);
-                }
-                len += 1;
-                continue;
-            }
-            _ => break,
-        };
-        if digit >= base {
-            return Err(LexError);
-        }
-        len += 1;
-        empty = false;
-    }
-    if empty {
-        Err(LexError)
-    } else {
-        Ok((input.advance(len), ()))
-    }
-}
-
-fn op(input: Cursor) -> PResult<Punct> {
-    let input = skip_whitespace(input);
-    match op_char(input) {
-        Ok((rest, '\'')) => {
-            symbol(rest)?;
-            Ok((rest, Punct::new('\'', Spacing::Joint)))
-        }
-        Ok((rest, ch)) => {
-            let kind = match op_char(rest) {
-                Ok(_) => Spacing::Joint,
-                Err(LexError) => Spacing::Alone,
-            };
-            Ok((rest, Punct::new(ch, kind)))
-        }
-        Err(LexError) => Err(LexError),
-    }
-}
-
-fn op_char(input: Cursor) -> PResult<char> {
-    if input.starts_with("//") || input.starts_with("/*") {
-        // Do not accept `/` of a comment as an op.
-        return Err(LexError);
-    }
-
-    let mut chars = input.chars();
-    let first = match chars.next() {
-        Some(ch) => ch,
-        None => {
-            return Err(LexError);
-        }
-    };
-    let recognized = "~!@#$%^&*-=+|;:,<.>/?'";
-    if recognized.contains(first) {
-        Ok((input.advance(first.len_utf8()), first))
-    } else {
-        Err(LexError)
-    }
-}
-
-fn doc_comment(input: Cursor) -> PResult<Vec<TokenTree>> {
-    let mut trees = Vec::new();
-    let (rest, ((comment, inner), span)) = spanned(input, doc_comment_contents)?;
-    trees.push(TokenTree::Punct(Punct::new('#', Spacing::Alone)));
-    if inner {
-        trees.push(Punct::new('!', Spacing::Alone).into());
-    }
-    let mut stream = vec![
-        TokenTree::Ident(crate::Ident::new("doc", span)),
-        TokenTree::Punct(Punct::new('=', Spacing::Alone)),
-        TokenTree::Literal(crate::Literal::string(comment)),
-    ];
-    for tt in stream.iter_mut() {
-        tt.set_span(span);
-    }
-    let group = Group::new(Delimiter::Bracket, stream.into_iter().collect());
-    trees.push(crate::Group::_new_stable(group).into());
-    for tt in trees.iter_mut() {
-        tt.set_span(span);
-    }
-    Ok((rest, trees))
-}
-
-named!(doc_comment_contents -> (&str, bool), alt!(
-    do_parse!(
-        punct!("//!") >>
-        s: take_until_newline_or_eof!() >>
-        ((s, true))
-    )
-    |
-    do_parse!(
-        option!(whitespace) >>
-        peek!(tag!("/*!")) >>
-        s: block_comment >>
-        ((s, true))
-    )
-    |
-    do_parse!(
-        punct!("///") >>
-        not!(tag!("/")) >>
-        s: take_until_newline_or_eof!() >>
-        ((s, false))
-    )
-    |
-    do_parse!(
-        option!(whitespace) >>
-        peek!(tuple!(tag!("/**"), not!(tag!("*")))) >>
-        s: block_comment >>
-        ((s, false))
-    )
-));
