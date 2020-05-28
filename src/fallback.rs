@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::cmp;
 use std::fmt;
 use std::iter;
+use std::mem;
 use std::ops::RangeBounds;
 #[cfg(procmacro2_semver_exempt)]
 use std::path::Path;
@@ -16,15 +17,15 @@ use unicode_xid::UnicodeXID;
 
 /// Force use of proc-macro2's fallback implementation of the API for now, even
 /// if the compiler's implementation is available.
-#[cfg(wrap_proc_macro)]
 pub fn force() {
+    #[cfg(wrap_proc_macro)]
     crate::detection::force_fallback();
 }
 
 /// Resume using the compiler's implementation of the proc macro API if it is
 /// available.
-#[cfg(wrap_proc_macro)]
 pub fn unforce() {
+    #[cfg(wrap_proc_macro)]
     crate::detection::unforce_fallback();
 }
 
@@ -43,6 +44,29 @@ impl TokenStream {
 
     pub fn is_empty(&self) -> bool {
         self.inner.len() == 0
+    }
+
+    fn take_inner(&mut self) -> Vec<TokenTree> {
+        mem::replace(&mut self.inner, Vec::new())
+    }
+}
+
+// Nonrecursive to prevent stack overflow.
+impl Drop for TokenStream {
+    fn drop(&mut self) {
+        while let Some(token) = self.inner.pop() {
+            let group = match token {
+                TokenTree::Group(group) => group.inner,
+                _ => continue,
+            };
+            #[cfg(wrap_proc_macro)]
+            let group = match group {
+                crate::imp::Group::Fallback(group) => group,
+                _ => continue,
+            };
+            let mut group = group;
+            self.inner.extend(group.stream.take_inner());
+        }
     }
 }
 
@@ -72,15 +96,11 @@ impl FromStr for TokenStream {
         // Create a dummy file & add it to the source map
         let cursor = get_cursor(src);
 
-        match token_stream(cursor) {
-            Ok((input, output)) => {
-                if input.is_empty() {
-                    Ok(output)
-                } else {
-                    Err(LexError)
-                }
-            }
-            Err(LexError) => Err(LexError),
+        let (rest, tokens) = token_stream(cursor)?;
+        if rest.is_empty() {
+            Ok(tokens)
+        } else {
+            Err(LexError)
         }
     }
 }
@@ -93,8 +113,8 @@ impl fmt::Display for TokenStream {
                 write!(f, " ")?;
             }
             joint = false;
-            match *tt {
-                TokenTree::Group(ref tt) => {
+            match tt {
+                TokenTree::Group(tt) => {
                     let (start, end) = match tt.delimiter() {
                         Delimiter::Parenthesis => ("(", ")"),
                         Delimiter::Brace => ("{", "}"),
@@ -107,15 +127,15 @@ impl fmt::Display for TokenStream {
                         write!(f, "{} {} {}", start, tt.stream(), end)?
                     }
                 }
-                TokenTree::Ident(ref tt) => write!(f, "{}", tt)?,
-                TokenTree::Punct(ref tt) => {
+                TokenTree::Ident(tt) => write!(f, "{}", tt)?,
+                TokenTree::Punct(tt) => {
                     write!(f, "{}", tt.as_char())?;
                     match tt.spacing() {
                         Spacing::Alone => {}
                         Spacing::Joint => joint = true,
                     }
                 }
-                TokenTree::Literal(ref tt) => write!(f, "{}", tt)?,
+                TokenTree::Literal(tt) => write!(f, "{}", tt)?,
             }
         }
 
@@ -172,8 +192,8 @@ impl iter::FromIterator<TokenStream> for TokenStream {
     fn from_iter<I: IntoIterator<Item = TokenStream>>(streams: I) -> Self {
         let mut v = Vec::new();
 
-        for stream in streams.into_iter() {
-            v.extend(stream.inner);
+        for mut stream in streams.into_iter() {
+            v.extend(stream.take_inner());
         }
 
         TokenStream { inner: v }
@@ -199,8 +219,8 @@ impl IntoIterator for TokenStream {
     type Item = TokenTree;
     type IntoIter = TokenTreeIter;
 
-    fn into_iter(self) -> TokenTreeIter {
-        self.inner.into_iter()
+    fn into_iter(mut self) -> TokenTreeIter {
+        self.take_inner().into_iter()
     }
 }
 
@@ -241,23 +261,11 @@ thread_local! {
     static SOURCE_MAP: RefCell<SourceMap> = RefCell::new(SourceMap {
         // NOTE: We start with a single dummy file which all call_site() and
         // def_site() spans reference.
-        files: vec![{
+        files: vec![FileInfo {
             #[cfg(procmacro2_semver_exempt)]
-            {
-                FileInfo {
-                    name: "<unspecified>".to_owned(),
-                    span: Span { lo: 0, hi: 0 },
-                    lines: vec![0],
-                }
-            }
-
-            #[cfg(not(procmacro2_semver_exempt))]
-            {
-                FileInfo {
-                    span: Span { lo: 0, hi: 0 },
-                    lines: vec![0],
-                }
-            }
+            name: "<unspecified>".to_owned(),
+            span: Span { lo: 0, hi: 0 },
+            lines: vec![0],
         }],
     });
 }
@@ -295,16 +303,21 @@ impl FileInfo {
     }
 }
 
-/// Computesthe offsets of each line in the given source string.
+/// Computes the offsets of each line in the given source string
+/// and the total number of characters
 #[cfg(span_locations)]
-fn lines_offsets(s: &str) -> Vec<usize> {
+fn lines_offsets(s: &str) -> (usize, Vec<usize>) {
     let mut lines = vec![0];
-    let mut prev = 0;
-    while let Some(len) = s[prev..].find('\n') {
-        prev += len + 1;
-        lines.push(prev);
+    let mut total = 0;
+
+    for ch in s.chars() {
+        total += 1;
+        if ch == '\n' {
+            lines.push(total);
+        }
     }
-    lines
+
+    (total, lines)
 }
 
 #[cfg(span_locations)]
@@ -323,23 +336,22 @@ impl SourceMap {
     }
 
     fn add_file(&mut self, name: &str, src: &str) -> Span {
-        let lines = lines_offsets(src);
+        let (len, lines) = lines_offsets(src);
         let lo = self.next_start_pos();
         // XXX(nika): Shouild we bother doing a checked cast or checked add here?
         let span = Span {
             lo,
-            hi: lo + (src.len() as u32),
+            hi: lo + (len as u32),
         };
 
-        #[cfg(procmacro2_semver_exempt)]
         self.files.push(FileInfo {
+            #[cfg(procmacro2_semver_exempt)]
             name: name.to_owned(),
             span,
             lines,
         });
 
         #[cfg(not(procmacro2_semver_exempt))]
-        self.files.push(FileInfo { span, lines });
         let _ = name;
 
         span
@@ -372,6 +384,12 @@ impl Span {
     #[cfg(span_locations)]
     pub fn call_site() -> Span {
         Span { lo: 0, hi: 0 }
+    }
+
+    #[cfg(procmacro2_semver_exempt)]
+    #[cfg(hygiene)]
+    pub fn mixed_site() -> Span {
+        Span::call_site()
     }
 
     #[cfg(procmacro2_semver_exempt)]
