@@ -376,6 +376,16 @@ impl Span {
         }
     }
 
+    #[cfg(procmacro2_semver_exempt)]
+    #[cfg(hygiene)]
+    pub fn mixed_site() -> Span {
+        if inside_proc_macro() {
+            Span::Compiler(proc_macro::Span::mixed_site())
+        } else {
+            Span::Fallback(fallback::Span::mixed_site())
+        }
+    }
+
     #[cfg(super_unstable)]
     pub fn def_site() -> Span {
         if inside_proc_macro() {
@@ -385,19 +395,31 @@ impl Span {
         }
     }
 
-    #[cfg(super_unstable)]
+    #[cfg(procmacro2_semver_exempt)]
     pub fn resolved_at(&self, other: Span) -> Span {
         match (self, other) {
+            #[cfg(hygiene)]
             (Span::Compiler(a), Span::Compiler(b)) => Span::Compiler(a.resolved_at(b)),
+
+            // Name resolution affects semantics, but location is only cosmetic
+            #[cfg(not(hygiene))]
+            (Span::Compiler(_), Span::Compiler(_)) => other,
+
             (Span::Fallback(a), Span::Fallback(b)) => Span::Fallback(a.resolved_at(b)),
             _ => mismatch(),
         }
     }
 
-    #[cfg(super_unstable)]
+    #[cfg(procmacro2_semver_exempt)]
     pub fn located_at(&self, other: Span) -> Span {
         match (self, other) {
+            #[cfg(hygiene)]
             (Span::Compiler(a), Span::Compiler(b)) => Span::Compiler(a.located_at(b)),
+
+            // Name resolution affects semantics, but location is only cosmetic
+            #[cfg(not(hygiene))]
+            (Span::Compiler(_), Span::Compiler(_)) => *self,
+
             (Span::Fallback(a), Span::Fallback(b)) => Span::Fallback(a.located_at(b)),
             _ => mismatch(),
         }
