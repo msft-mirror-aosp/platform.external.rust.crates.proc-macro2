@@ -16,17 +16,18 @@ rust_library_host_rlib {
     rlibs: [
         "libunicode_xid",
     ],
+    compile_multilib: "first", // added
 }
 
 rust_test_host {
     name: "proc-macro2_tests",
     crate_name: "proc_macro2",
     srcs: [
+        "tests/comments.rs",
         "tests/features.rs",
         "tests/marker.rs",
         "tests/test.rs",
     ],
-    relative_install_path: "proc-macro2_tests",
     test_suites: ["general-tests"],
     auto_gen_config: true,
     edition: "2018",
@@ -49,7 +50,6 @@ rust_test_host {
     name: "proc-macro2_tests_proc_macro2",
     crate_name: "proc_macro2",
     srcs: ["src/lib.rs"],
-    relative_install_path: "proc-macro2_tests",
     test_suites: ["general-tests"],
     auto_gen_config: true,
     edition: "2018",
@@ -68,4 +68,6 @@ rust_test_host {
 }
 
 // dependent_library ["feature_list"]
+//   proc-macro2-1.0.17
+//   quote-1.0.6
 //   unicode-xid-0.2.0 "default"
