@@ -19,15 +19,9 @@ rust_library_host_rlib {
     compile_multilib: "first", // added
 }
 
-rust_test_host {
+rust_defaults {
     name: "proc-macro2_tests",
     crate_name: "proc_macro2",
-    srcs: [
-        "tests/comments.rs",
-        "tests/features.rs",
-        "tests/marker.rs",
-        "tests/test.rs",
-    ],
     test_suites: ["general-tests"],
     auto_gen_config: true,
     edition: "2018",
@@ -43,6 +37,38 @@ rust_test_host {
         "libproc_macro2",
         "libquote",
         "libunicode_xid",
+    ],
+}
+
+rust_test_host {
+    name: "proc-macro2_tests_comments",
+    defaults: ["proc-macro2_tests"],
+    srcs: [
+        "tests/comments.rs",
+    ],
+}
+
+rust_test_host {
+    name: "proc-macro2_tests_features",
+    defaults: ["proc-macro2_tests"],
+    srcs: [
+        "tests/features.rs",
+    ],
+}
+
+rust_test_host {
+    name: "proc-macro2_tests_marker",
+    defaults: ["proc-macro2_tests"],
+    srcs: [
+        "tests/marker.rs",
+    ],
+}
+
+rust_test_host {
+    name: "proc-macro2_tests_test",
+    defaults: ["proc-macro2_tests"],
+    srcs: [
+        "tests/test.rs",
     ],
 }
 
