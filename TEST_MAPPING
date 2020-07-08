@@ -5,6 +5,10 @@
       "host": true
     },
     {
+      "name": "proc-macro2_tests_comments",
+      "host": true
+    },
+    {
       "name": "proc-macro2_tests_features",
       "host": true
     },

@@ -4,8 +4,9 @@ use crate::{Delimiter, Spacing, TokenTree};
 use std::cell::RefCell;
 #[cfg(span_locations)]
 use std::cmp;
-use std::fmt;
-use std::iter;
+use std::fmt::{self, Debug, Display};
+use std::iter::FromIterator;
+use std::mem;
 use std::ops::RangeBounds;
 #[cfg(procmacro2_semver_exempt)]
 use std::path::Path;
@@ -16,15 +17,15 @@ use unicode_xid::UnicodeXID;
 
 /// Force use of proc-macro2's fallback implementation of the API for now, even
 /// if the compiler's implementation is available.
-#[cfg(wrap_proc_macro)]
 pub fn force() {
+    #[cfg(wrap_proc_macro)]
     crate::detection::force_fallback();
 }
 
 /// Resume using the compiler's implementation of the proc macro API if it is
 /// available.
-#[cfg(wrap_proc_macro)]
 pub fn unforce() {
+    #[cfg(wrap_proc_macro)]
     crate::detection::unforce_fallback();
 }
 
@@ -43,6 +44,72 @@ impl TokenStream {
 
     pub fn is_empty(&self) -> bool {
         self.inner.len() == 0
+    }
+
+    fn take_inner(&mut self) -> Vec<TokenTree> {
+        mem::replace(&mut self.inner, Vec::new())
+    }
+
+    fn push_token(&mut self, token: TokenTree) {
+        // https://github.com/alexcrichton/proc-macro2/issues/235
+        match token {
+            #[cfg(not(no_bind_by_move_pattern_guard))]
+            TokenTree::Literal(crate::Literal {
+                #[cfg(wrap_proc_macro)]
+                    inner: crate::imp::Literal::Fallback(literal),
+                #[cfg(not(wrap_proc_macro))]
+                    inner: literal,
+                ..
+            }) if literal.text.starts_with('-') => {
+                push_negative_literal(self, literal);
+            }
+            #[cfg(no_bind_by_move_pattern_guard)]
+            TokenTree::Literal(crate::Literal {
+                #[cfg(wrap_proc_macro)]
+                    inner: crate::imp::Literal::Fallback(literal),
+                #[cfg(not(wrap_proc_macro))]
+                    inner: literal,
+                ..
+            }) => {
+                if literal.text.starts_with('-') {
+                    push_negative_literal(self, literal);
+                } else {
+                    self.inner
+                        .push(TokenTree::Literal(crate::Literal::_new_stable(literal)));
+                }
+            }
+            _ => self.inner.push(token),
+        }
+
+        #[cold]
+        fn push_negative_literal(stream: &mut TokenStream, mut literal: Literal) {
+            literal.text.remove(0);
+            let mut punct = crate::Punct::new('-', Spacing::Alone);
+            punct.set_span(crate::Span::_new_stable(literal.span));
+            stream.inner.push(TokenTree::Punct(punct));
+            stream
+                .inner
+                .push(TokenTree::Literal(crate::Literal::_new_stable(literal)));
+        }
+    }
+}
+
+// Nonrecursive to prevent stack overflow.
+impl Drop for TokenStream {
+    fn drop(&mut self) {
+        while let Some(token) = self.inner.pop() {
+            let group = match token {
+                TokenTree::Group(group) => group.inner,
+                _ => continue,
+            };
+            #[cfg(wrap_proc_macro)]
+            let group = match group {
+                crate::imp::Group::Fallback(group) => group,
+                _ => continue,
+            };
+            let mut group = group;
+            self.inner.extend(group.stream.take_inner());
+        }
     }
 }
 
@@ -72,20 +139,16 @@ impl FromStr for TokenStream {
         // Create a dummy file & add it to the source map
         let cursor = get_cursor(src);
 
-        match token_stream(cursor) {
-            Ok((input, output)) => {
-                if input.is_empty() {
-                    Ok(output)
-                } else {
-                    Err(LexError)
-                }
-            }
-            Err(LexError) => Err(LexError),
+        let (rest, tokens) = token_stream(cursor)?;
+        if rest.is_empty() {
+            Ok(tokens)
+        } else {
+            Err(LexError)
         }
     }
 }
 
-impl fmt::Display for TokenStream {
+impl Display for TokenStream {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut joint = false;
         for (i, tt) in self.inner.iter().enumerate() {
@@ -93,8 +156,8 @@ impl fmt::Display for TokenStream {
                 write!(f, " ")?;
             }
             joint = false;
-            match *tt {
-                TokenTree::Group(ref tt) => {
+            match tt {
+                TokenTree::Group(tt) => {
                     let (start, end) = match tt.delimiter() {
                         Delimiter::Parenthesis => ("(", ")"),
                         Delimiter::Brace => ("{", "}"),
@@ -107,15 +170,15 @@ impl fmt::Display for TokenStream {
                         write!(f, "{} {} {}", start, tt.stream(), end)?
                     }
                 }
-                TokenTree::Ident(ref tt) => write!(f, "{}", tt)?,
-                TokenTree::Punct(ref tt) => {
+                TokenTree::Ident(tt) => write!(f, "{}", tt)?,
+                TokenTree::Punct(tt) => {
                     write!(f, "{}", tt.as_char())?;
                     match tt.spacing() {
                         Spacing::Alone => {}
                         Spacing::Joint => joint = true,
                     }
                 }
-                TokenTree::Literal(ref tt) => write!(f, "{}", tt)?,
+                TokenTree::Literal(tt) => write!(f, "{}", tt)?,
             }
         }
 
@@ -123,7 +186,7 @@ impl fmt::Display for TokenStream {
     }
 }
 
-impl fmt::Debug for TokenStream {
+impl Debug for TokenStream {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("TokenStream ")?;
         f.debug_list().entries(self.clone()).finish()
@@ -152,28 +215,26 @@ impl From<TokenStream> for proc_macro::TokenStream {
 
 impl From<TokenTree> for TokenStream {
     fn from(tree: TokenTree) -> TokenStream {
-        TokenStream { inner: vec![tree] }
+        let mut stream = TokenStream::new();
+        stream.push_token(tree);
+        stream
     }
 }
 
-impl iter::FromIterator<TokenTree> for TokenStream {
-    fn from_iter<I: IntoIterator<Item = TokenTree>>(streams: I) -> Self {
-        let mut v = Vec::new();
-
-        for token in streams.into_iter() {
-            v.push(token);
-        }
-
-        TokenStream { inner: v }
+impl FromIterator<TokenTree> for TokenStream {
+    fn from_iter<I: IntoIterator<Item = TokenTree>>(tokens: I) -> Self {
+        let mut stream = TokenStream::new();
+        stream.extend(tokens);
+        stream
     }
 }
 
-impl iter::FromIterator<TokenStream> for TokenStream {
+impl FromIterator<TokenStream> for TokenStream {
     fn from_iter<I: IntoIterator<Item = TokenStream>>(streams: I) -> Self {
         let mut v = Vec::new();
 
-        for stream in streams.into_iter() {
-            v.extend(stream.inner);
+        for mut stream in streams {
+            v.extend(stream.take_inner());
         }
 
         TokenStream { inner: v }
@@ -181,15 +242,14 @@ impl iter::FromIterator<TokenStream> for TokenStream {
 }
 
 impl Extend<TokenTree> for TokenStream {
-    fn extend<I: IntoIterator<Item = TokenTree>>(&mut self, streams: I) {
-        self.inner.extend(streams);
+    fn extend<I: IntoIterator<Item = TokenTree>>(&mut self, tokens: I) {
+        tokens.into_iter().for_each(|token| self.push_token(token));
     }
 }
 
 impl Extend<TokenStream> for TokenStream {
     fn extend<I: IntoIterator<Item = TokenStream>>(&mut self, streams: I) {
-        self.inner
-            .extend(streams.into_iter().flat_map(|stream| stream));
+        self.inner.extend(streams.into_iter().flatten());
     }
 }
 
@@ -199,8 +259,8 @@ impl IntoIterator for TokenStream {
     type Item = TokenTree;
     type IntoIter = TokenTreeIter;
 
-    fn into_iter(self) -> TokenTreeIter {
-        self.inner.into_iter()
+    fn into_iter(mut self) -> TokenTreeIter {
+        self.take_inner().into_iter()
     }
 }
 
@@ -221,7 +281,7 @@ impl SourceFile {
     }
 }
 
-impl fmt::Debug for SourceFile {
+impl Debug for SourceFile {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("SourceFile")
             .field("path", &self.path())
@@ -241,23 +301,11 @@ thread_local! {
     static SOURCE_MAP: RefCell<SourceMap> = RefCell::new(SourceMap {
         // NOTE: We start with a single dummy file which all call_site() and
         // def_site() spans reference.
-        files: vec![{
+        files: vec![FileInfo {
             #[cfg(procmacro2_semver_exempt)]
-            {
-                FileInfo {
-                    name: "<unspecified>".to_owned(),
-                    span: Span { lo: 0, hi: 0 },
-                    lines: vec![0],
-                }
-            }
-
-            #[cfg(not(procmacro2_semver_exempt))]
-            {
-                FileInfo {
-                    span: Span { lo: 0, hi: 0 },
-                    lines: vec![0],
-                }
-            }
+            name: "<unspecified>".to_owned(),
+            span: Span { lo: 0, hi: 0 },
+            lines: vec![0],
         }],
     });
 }
@@ -295,16 +343,21 @@ impl FileInfo {
     }
 }
 
-/// Computesthe offsets of each line in the given source string.
+/// Computes the offsets of each line in the given source string
+/// and the total number of characters
 #[cfg(span_locations)]
-fn lines_offsets(s: &str) -> Vec<usize> {
+fn lines_offsets(s: &str) -> (usize, Vec<usize>) {
     let mut lines = vec![0];
-    let mut prev = 0;
-    while let Some(len) = s[prev..].find('\n') {
-        prev += len + 1;
-        lines.push(prev);
+    let mut total = 0;
+
+    for ch in s.chars() {
+        total += 1;
+        if ch == '\n' {
+            lines.push(total);
+        }
     }
-    lines
+
+    (total, lines)
 }
 
 #[cfg(span_locations)]
@@ -323,23 +376,22 @@ impl SourceMap {
     }
 
     fn add_file(&mut self, name: &str, src: &str) -> Span {
-        let lines = lines_offsets(src);
+        let (len, lines) = lines_offsets(src);
         let lo = self.next_start_pos();
         // XXX(nika): Shouild we bother doing a checked cast or checked add here?
         let span = Span {
             lo,
-            hi: lo + (src.len() as u32),
+            hi: lo + (len as u32),
         };
 
-        #[cfg(procmacro2_semver_exempt)]
         self.files.push(FileInfo {
+            #[cfg(procmacro2_semver_exempt)]
             name: name.to_owned(),
             span,
             lines,
         });
 
         #[cfg(not(procmacro2_semver_exempt))]
-        self.files.push(FileInfo { span, lines });
         let _ = name;
 
         span
@@ -372,6 +424,12 @@ impl Span {
     #[cfg(span_locations)]
     pub fn call_site() -> Span {
         Span { lo: 0, hi: 0 }
+    }
+
+    #[cfg(procmacro2_semver_exempt)]
+    #[cfg(hygiene)]
+    pub fn mixed_site() -> Span {
+        Span::call_site()
     }
 
     #[cfg(procmacro2_semver_exempt)]
@@ -468,18 +526,25 @@ impl Span {
     }
 }
 
-impl fmt::Debug for Span {
+impl Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        #[cfg(procmacro2_semver_exempt)]
+        #[cfg(span_locations)]
         return write!(f, "bytes({}..{})", self.lo, self.hi);
 
-        #[cfg(not(procmacro2_semver_exempt))]
+        #[cfg(not(span_locations))]
         write!(f, "Span")
     }
 }
 
 pub(crate) fn debug_span_field_if_nontrivial(debug: &mut fmt::DebugStruct, span: Span) {
-    if cfg!(procmacro2_semver_exempt) {
+    #[cfg(span_locations)]
+    {
+        if span.lo == 0 && span.hi == 0 {
+            return;
+        }
+    }
+
+    if cfg!(span_locations) {
         debug.field("span", &span);
     }
 }
@@ -525,7 +590,7 @@ impl Group {
     }
 }
 
-impl fmt::Display for Group {
+impl Display for Group {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (left, right) = match self.delimiter {
             Delimiter::Parenthesis => ("(", ")"),
@@ -535,20 +600,19 @@ impl fmt::Display for Group {
         };
 
         f.write_str(left)?;
-        self.stream.fmt(f)?;
+        Display::fmt(&self.stream, f)?;
         f.write_str(right)?;
 
         Ok(())
     }
 }
 
-impl fmt::Debug for Group {
+impl Debug for Group {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         let mut debug = fmt.debug_struct("Group");
         debug.field("delimiter", &self.delimiter);
         debug.field("stream", &self.stream);
-        #[cfg(procmacro2_semver_exempt)]
-        debug.field("span", &self.span);
+        debug_span_field_if_nontrivial(&mut debug, self.span);
         debug.finish()
     }
 }
@@ -652,18 +716,18 @@ where
     }
 }
 
-impl fmt::Display for Ident {
+impl Display for Ident {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.raw {
-            "r#".fmt(f)?;
+            f.write_str("r#")?;
         }
-        self.sym.fmt(f)
+        Display::fmt(&self.sym, f)
     }
 }
 
-impl fmt::Debug for Ident {
+impl Debug for Ident {
     // Ident(proc_macro), Ident(r#union)
-    #[cfg(not(procmacro2_semver_exempt))]
+    #[cfg(not(span_locations))]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut debug = f.debug_tuple("Ident");
         debug.field(&format_args!("{}", self));
@@ -674,11 +738,11 @@ impl fmt::Debug for Ident {
     //     sym: proc_macro,
     //     span: bytes(128..138)
     // }
-    #[cfg(procmacro2_semver_exempt)]
+    #[cfg(span_locations)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut debug = f.debug_struct("Ident");
         debug.field("sym", &format_args!("{}", self));
-        debug.field("span", &self.span);
+        debug_span_field_if_nontrivial(&mut debug, self.span);
         debug.finish()
     }
 }
@@ -748,7 +812,7 @@ impl Literal {
 
     pub fn f32_unsuffixed(f: f32) -> Literal {
         let mut s = f.to_string();
-        if !s.contains(".") {
+        if !s.contains('.') {
             s.push_str(".0");
         }
         Literal::_new(s)
@@ -756,7 +820,7 @@ impl Literal {
 
     pub fn f64_unsuffixed(f: f64) -> Literal {
         let mut s = f.to_string();
-        if !s.contains(".") {
+        if !s.contains('.') {
             s.push_str(".0");
         }
         Literal::_new(s)
@@ -793,6 +857,7 @@ impl Literal {
     pub fn byte_string(bytes: &[u8]) -> Literal {
         let mut escaped = "b\"".to_string();
         for b in bytes {
+            #[allow(clippy::match_overlapping_arm)]
             match *b {
                 b'\0' => escaped.push_str(r"\0"),
                 b'\t' => escaped.push_str(r"\t"),
@@ -821,18 +886,17 @@ impl Literal {
     }
 }
 
-impl fmt::Display for Literal {
+impl Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.text.fmt(f)
+        Display::fmt(&self.text, f)
     }
 }
 
-impl fmt::Debug for Literal {
+impl Debug for Literal {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         let mut debug = fmt.debug_struct("Literal");
         debug.field("lit", &format_args!("{}", self.text));
-        #[cfg(procmacro2_semver_exempt)]
-        debug.field("span", &self.span);
+        debug_span_field_if_nontrivial(&mut debug, self.span);
         debug.finish()
     }
 }
