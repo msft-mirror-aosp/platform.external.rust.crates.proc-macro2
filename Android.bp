@@ -10,6 +10,7 @@ rust_library_host {
         "proc-macro",
     ],
     flags: [
+        "--cfg proc_macro_span",
         "--cfg use_proc_macro",
         "--cfg wrap_proc_macro",
     ],
@@ -31,6 +32,7 @@ rust_test_host {
         "proc-macro",
     ],
     flags: [
+        "--cfg proc_macro_span",
         "--cfg use_proc_macro",
         "--cfg wrap_proc_macro",
     ],
@@ -51,6 +53,7 @@ rust_defaults {
         "proc-macro",
     ],
     flags: [
+        "--cfg proc_macro_span",
         "--cfg use_proc_macro",
         "--cfg wrap_proc_macro",
     ],
