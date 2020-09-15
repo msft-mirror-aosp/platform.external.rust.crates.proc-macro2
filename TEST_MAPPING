@@ -20,6 +20,10 @@
     {
       "name": "proc-macro2_host_test_tests_test",
       "host": true
+    },
+    {
+      "name": "proc-macro2_host_test_tests_test_fmt",
+      "host": true
     }
   ]
 }
