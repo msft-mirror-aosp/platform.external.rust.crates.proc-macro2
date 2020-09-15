@@ -11,6 +11,7 @@ rust_library_host {
         "span-locations",
     ],
     flags: [
+        "--cfg hygiene",
         "--cfg proc_macro_span",
         "--cfg span_locations",
         "--cfg use_proc_macro",
@@ -35,6 +36,7 @@ rust_test_host {
         "span-locations",
     ],
     flags: [
+        "--cfg hygiene",
         "--cfg proc_macro_span",
         "--cfg span_locations",
         "--cfg use_proc_macro",
@@ -58,6 +60,7 @@ rust_defaults {
         "span-locations",
     ],
     flags: [
+        "--cfg hygiene",
         "--cfg proc_macro_span",
         "--cfg span_locations",
         "--cfg use_proc_macro",
@@ -94,7 +97,13 @@ rust_test_host {
     srcs: ["tests/test.rs"],
 }
 
+rust_test_host {
+    name: "proc-macro2_host_test_tests_test_fmt",
+    defaults: ["proc-macro2_defaults"],
+    srcs: ["tests/test_fmt.rs"],
+}
+
 // dependent_library ["feature_list"]
-//   proc-macro2-1.0.19
+//   proc-macro2-1.0.21
 //   quote-1.0.7
 //   unicode-xid-0.2.1 "default"
