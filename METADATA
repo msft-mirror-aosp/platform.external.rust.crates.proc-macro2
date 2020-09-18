@@ -6,14 +6,14 @@ third_party {
     value: "https://crates.io/crates/proc-macro2/"
   }
   url {
-    type: GIT
-    value: "https://github.com/alexcrichton/proc-macro2"
+    type: ARCHIVE
+    value: "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.20.crate"
   }
-  version: "1.0.19"
+  version: "1.0.20"
   license_type: NOTICE
   last_upgrade_date {
     year: 2020
-    month: 7
-    day: 20
+    month: 9
+    day: 3
   }
 }
