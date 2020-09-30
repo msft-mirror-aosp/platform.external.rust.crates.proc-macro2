@@ -104,6 +104,6 @@ rust_test_host {
 }
 
 // dependent_library ["feature_list"]
-//   proc-macro2-1.0.21
+//   proc-macro2-1.0.22
 //   quote-1.0.7
 //   unicode-xid-0.2.1 "default"
