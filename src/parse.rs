@@ -585,12 +585,17 @@ fn float_digits(input: Cursor) -> Result<Cursor, LexError> {
         }
     }
 
-    let rest = input.advance(len);
-    if !(has_dot || has_exp || rest.starts_with("f32") || rest.starts_with("f64")) {
+    if !(has_dot || has_exp) {
         return Err(LexError);
     }
 
     if has_exp {
+        let token_before_exp = if has_dot {
+            Ok(input.advance(len - 1))
+        } else {
+            Err(LexError)
+        };
+        let mut has_sign = false;
         let mut has_exp_value = false;
         while let Some(&ch) = chars.peek() {
             match ch {
@@ -598,8 +603,12 @@ fn float_digits(input: Cursor) -> Result<Cursor, LexError> {
                     if has_exp_value {
                         break;
                     }
+                    if has_sign {
+                        return token_before_exp;
+                    }
                     chars.next();
                     len += 1;
+                    has_sign = true;
                 }
                 '0'..='9' => {
                     chars.next();
@@ -614,7 +623,7 @@ fn float_digits(input: Cursor) -> Result<Cursor, LexError> {
             }
         }
         if !has_exp_value {
-            return Err(LexError);
+            return token_before_exp;
         }
     }
 
@@ -648,10 +657,25 @@ fn digits(mut input: Cursor) -> Result<Cursor, LexError> {
     let mut len = 0;
     let mut empty = true;
     for b in input.bytes() {
-        let digit = match b {
-            b'0'..=b'9' => (b - b'0') as u64,
-            b'a'..=b'f' => 10 + (b - b'a') as u64,
-            b'A'..=b'F' => 10 + (b - b'A') as u64,
+        match b {
+            b'0'..=b'9' => {
+                let digit = (b - b'0') as u64;
+                if digit >= base {
+                    return Err(LexError);
+                }
+            }
+            b'a'..=b'f' => {
+                let digit = 10 + (b - b'a') as u64;
+                if digit >= base {
+                    break;
+                }
+            }
+            b'A'..=b'F' => {
+                let digit = 10 + (b - b'A') as u64;
+                if digit >= base {
+                    break;
+                }
+            }
             b'_' => {
                 if empty && base == 10 {
                     return Err(LexError);
@@ -661,9 +685,6 @@ fn digits(mut input: Cursor) -> Result<Cursor, LexError> {
             }
             _ => break,
         };
-        if digit >= base {
-            return Err(LexError);
-        }
         len += 1;
         empty = false;
     }
