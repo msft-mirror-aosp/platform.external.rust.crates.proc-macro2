@@ -12,6 +12,7 @@ rust_library_host {
     ],
     flags: [
         "--cfg hygiene",
+        "--cfg lexerror_display",
         "--cfg proc_macro_span",
         "--cfg span_locations",
         "--cfg use_proc_macro",
@@ -37,6 +38,7 @@ rust_test_host {
     ],
     flags: [
         "--cfg hygiene",
+        "--cfg lexerror_display",
         "--cfg proc_macro_span",
         "--cfg span_locations",
         "--cfg use_proc_macro",
@@ -61,6 +63,7 @@ rust_defaults {
     ],
     flags: [
         "--cfg hygiene",
+        "--cfg lexerror_display",
         "--cfg proc_macro_span",
         "--cfg span_locations",
         "--cfg use_proc_macro",
@@ -104,6 +107,6 @@ rust_test_host {
 }
 
 // dependent_library ["feature_list"]
-//   proc-macro2-1.0.22
+//   proc-macro2-1.0.24
 //   quote-1.0.7
 //   unicode-xid-0.2.1 "default"
