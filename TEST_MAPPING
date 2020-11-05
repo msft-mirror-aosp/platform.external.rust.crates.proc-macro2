@@ -2,28 +2,62 @@
 {
   "presubmit": [
     {
-      "name": "proc-macro2_host_test_src_lib",
-      "host": true
+      "host": true,
+      "name": "proc-macro2_host_test_src_lib"
     },
     {
-      "name": "proc-macro2_host_test_tests_comments",
-      "host": true
+      "host": true,
+      "name": "proc-macro2_host_test_tests_comments"
     },
     {
-      "name": "proc-macro2_host_test_tests_features",
-      "host": true
+      "host": true,
+      "name": "proc-macro2_host_test_tests_features"
     },
     {
-      "name": "proc-macro2_host_test_tests_marker",
-      "host": true
+      "host": true,
+      "name": "proc-macro2_host_test_tests_marker"
     },
     {
-      "name": "proc-macro2_host_test_tests_test",
-      "host": true
+      "host": true,
+      "name": "proc-macro2_host_test_tests_test"
     },
     {
-      "name": "proc-macro2_host_test_tests_test_fmt",
-      "host": true
+      "host": true,
+      "name": "proc-macro2_host_test_tests_test_fmt"
+    },
+    {
+      "host": true,
+      "name": "pin-project-internal_host_test_src_lib"
+    },
+    {
+      "host": true,
+      "name": "futures-util_host_test_src_lib"
+    },
+    {
+      "name": "futures-util_device_test_src_lib"
+    },
+    {
+      "host": true,
+      "name": "structopt-derive_host_test_src_lib"
+    },
+    {
+      "host": true,
+      "name": "tokio-macros_host_test_src_lib"
+    },
+    {
+      "host": true,
+      "name": "proc-macro-error-attr_host_test_src_lib"
+    },
+    {
+      "host": true,
+      "name": "libsqlite3-sys_host_test_src_lib"
+    },
+    {
+      "name": "libsqlite3-sys_device_test_src_lib"
+    },
+    {
+      "host": true,
+      "name": "syn-mid_host_test_src_lib"
     }
   ]
 }
