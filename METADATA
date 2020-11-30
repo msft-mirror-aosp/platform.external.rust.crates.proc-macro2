@@ -1,19 +1,19 @@
 name: "proc-macro2"
-description: "A wrapper around the procedural macro API of the compiler\'s proc_macro crate."
+description: "A substitute implementation of the compiler\'s `proc_macro` API to decouple token-based libraries from the procedural macro use case."
 third_party {
   url {
     type: HOMEPAGE
-    value: "https://crates.io/crates/proc-macro2/"
+    value: "https://crates.io/crates/proc-macro2"
   }
   url {
     type: ARCHIVE
-    value: "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.20.crate"
+    value: "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.24.crate"
   }
-  version: "1.0.20"
+  version: "1.0.24"
   license_type: NOTICE
   last_upgrade_date {
     year: 2020
-    month: 9
-    day: 3
+    month: 10
+    day: 26
   }
 }
