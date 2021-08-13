@@ -91,7 +91,7 @@ rust_test_host {
 }
 
 rust_defaults {
-    name: "proc-macro2_defaults",
+    name: "proc-macro2_test_defaults",
     crate_name: "proc_macro2",
     test_suites: ["general-tests"],
     auto_gen_config: true,
@@ -118,7 +118,7 @@ rust_defaults {
 
 rust_test_host {
     name: "proc-macro2_host_test_tests_comments",
-    defaults: ["proc-macro2_defaults"],
+    defaults: ["proc-macro2_test_defaults"],
     srcs: ["tests/comments.rs"],
     test_options: {
         unit_test: true,
@@ -127,7 +127,7 @@ rust_test_host {
 
 rust_test_host {
     name: "proc-macro2_host_test_tests_features",
-    defaults: ["proc-macro2_defaults"],
+    defaults: ["proc-macro2_test_defaults"],
     srcs: ["tests/features.rs"],
     test_options: {
         unit_test: true,
@@ -136,7 +136,7 @@ rust_test_host {
 
 rust_test_host {
     name: "proc-macro2_host_test_tests_marker",
-    defaults: ["proc-macro2_defaults"],
+    defaults: ["proc-macro2_test_defaults"],
     srcs: ["tests/marker.rs"],
     test_options: {
         unit_test: true,
@@ -145,7 +145,7 @@ rust_test_host {
 
 rust_test_host {
     name: "proc-macro2_host_test_tests_test",
-    defaults: ["proc-macro2_defaults"],
+    defaults: ["proc-macro2_test_defaults"],
     srcs: ["tests/test.rs"],
     test_options: {
         unit_test: true,
@@ -154,7 +154,7 @@ rust_test_host {
 
 rust_test_host {
     name: "proc-macro2_host_test_tests_test_fmt",
-    defaults: ["proc-macro2_defaults"],
+    defaults: ["proc-macro2_test_defaults"],
     srcs: ["tests/test_fmt.rs"],
     test_options: {
         unit_test: true,
@@ -162,6 +162,6 @@ rust_test_host {
 }
 
 // dependent_library ["feature_list"]
-//   proc-macro2-1.0.27
+//   proc-macro2-1.0.28
 //   quote-1.0.9
 //   unicode-xid-0.2.2 "default"
