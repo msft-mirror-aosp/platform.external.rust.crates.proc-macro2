@@ -59,7 +59,7 @@ impl<'a> Cursor<'a> {
     }
 }
 
-pub(crate) struct Reject;
+struct Reject;
 type PResult<'a, O> = Result<(Cursor<'a>, O), Reject>;
 
 fn skip_whitespace(input: Cursor) -> Cursor {
@@ -168,7 +168,7 @@ pub(crate) fn token_stream(mut input: Cursor) -> Result<TokenStream, LexError> {
         let first = match input.bytes().next() {
             Some(first) => first,
             None => match stack.last() {
-                None => return Ok(TokenStream::from(trees)),
+                None => return Ok(TokenStream { inner: trees }),
                 #[cfg(span_locations)]
                 Some((lo, _frame)) => {
                     return Err(LexError {
@@ -209,7 +209,7 @@ pub(crate) fn token_stream(mut input: Cursor) -> Result<TokenStream, LexError> {
                 return Err(lex_error(input));
             }
             input = input.advance(1);
-            let mut g = Group::new(open_delimiter, TokenStream::from(trees));
+            let mut g = Group::new(open_delimiter, TokenStream { inner: trees });
             g.set_span(Span {
                 #[cfg(span_locations)]
                 lo,
@@ -310,7 +310,7 @@ fn ident_not_raw(input: Cursor) -> PResult<&str> {
     Ok((input.advance(end), &input.rest[..end]))
 }
 
-pub(crate) fn literal(input: Cursor) -> PResult<Literal> {
+fn literal(input: Cursor) -> PResult<Literal> {
     let rest = literal_nocapture(input)?;
     let end = input.len() - rest.len();
     Ok((rest, Literal::_new(input.rest[..end].to_string())))
@@ -461,7 +461,7 @@ fn cooked_byte_string(mut input: Cursor) -> Result<Cursor, Reject> {
 fn raw_string(input: Cursor) -> Result<Cursor, Reject> {
     let mut chars = input.char_indices();
     let mut n = 0;
-    for (i, ch) in &mut chars {
+    while let Some((i, ch)) = chars.next() {
         match ch {
             '"' => {
                 n = i;
@@ -621,7 +621,8 @@ fn float_digits(input: Cursor) -> Result<Cursor, Reject> {
                 chars.next();
                 if chars
                     .peek()
-                    .map_or(false, |&ch| ch == '.' || is_ident_start(ch))
+                    .map(|&ch| ch == '.' || is_ident_start(ch))
+                    .unwrap_or(false)
                 {
                     return Err(Reject);
                 }
@@ -816,12 +817,12 @@ fn doc_comment(input: Cursor) -> PResult<Vec<TokenTree>> {
         TokenTree::Punct(Punct::new('=', Spacing::Alone)),
         TokenTree::Literal(crate::Literal::string(comment)),
     ];
-    for tt in &mut stream {
+    for tt in stream.iter_mut() {
         tt.set_span(span);
     }
-    let group = Group::new(Delimiter::Bracket, TokenStream::from(stream));
+    let group = Group::new(Delimiter::Bracket, stream.into_iter().collect());
     trees.push(crate::Group::_new_stable(group).into());
-    for tt in &mut trees {
+    for tt in trees.iter_mut() {
         tt.set_span(span);
     }
     Ok((rest, trees))
