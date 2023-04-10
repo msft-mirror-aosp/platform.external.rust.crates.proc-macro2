@@ -1,6 +1,6 @@
 [package]
 name = "proc-macro2"
-version = "1.0.47" # remember to update html_root_url
+version = "1.0.54" # remember to update html_root_url
 authors = ["David Tolnay <dtolnay@gmail.com>", "Alex Crichton <alex@alexcrichton.com>"]
 autobenches = false
 categories = ["development-tools::procedural-macro-helpers"]
@@ -25,6 +25,7 @@ unicode-ident = "1.0"
 
 [dev-dependencies]
 quote = { version = "1.0", default_features = false }
+rustversion = "1"
 
 [features]
 proc-macro = []
@@ -36,6 +37,9 @@ span-locations = []
 
 # This feature no longer means anything.
 nightly = []
+
+[lib]
+doc-scrape-examples = false
 
 [workspace]
 members = ["benches/bench-libproc-macro", "tests/ui"]
