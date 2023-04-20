@@ -11,13 +11,13 @@ third_party {
   }
   url {
     type: ARCHIVE
-    value: "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.51.crate"
+    value: "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.54.crate"
   }
-  version: "1.0.51"
+  version: "1.0.54"
   license_type: NOTICE
   last_upgrade_date {
     year: 2023
-    month: 2
-    day: 6
+    month: 3
+    day: 30
   }
 }
