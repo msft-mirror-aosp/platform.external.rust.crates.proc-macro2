@@ -97,6 +97,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: dtolnay/install@cargo-fuzz
       - run: cargo fuzz check
+      - run: cargo check --no-default-features --features afl
+        working-directory: fuzz
+      - uses: dtolnay/install@honggfuzz
+      - run: sudo apt-get install binutils-dev libunwind-dev
+      - run: cargo hfuzz build --no-default-features --features honggfuzz
+        working-directory: fuzz
 
   clippy:
     name: Clippy
