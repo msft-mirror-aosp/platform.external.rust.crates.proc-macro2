@@ -41,9 +41,9 @@ rust_library_host {
     name: "libproc_macro2",
     crate_name: "proc_macro2",
     cargo_env_compat: true,
-    cargo_pkg_version: "1.0.36",
+    cargo_pkg_version: "1.0.66",
     srcs: ["src/lib.rs"],
-    edition: "2018",
+    edition: "2021",
     features: [
         "default",
         "proc-macro",
@@ -51,23 +51,24 @@ rust_library_host {
     ],
     cfgs: [
         "span_locations",
-        "use_proc_macro",
         "wrap_proc_macro",
     ],
     rustlibs: [
-        "libunicode_xid",
+        "libunicode_ident",
     ],
     compile_multilib: "first",
+    product_available: true,
+    vendor_available: true,
 }
 
 rust_defaults {
     name: "proc-macro2_test_defaults",
     crate_name: "proc_macro2",
     cargo_env_compat: true,
-    cargo_pkg_version: "1.0.36",
+    cargo_pkg_version: "1.0.66",
     test_suites: ["general-tests"],
     auto_gen_config: true,
-    edition: "2018",
+    edition: "2021",
     features: [
         "default",
         "proc-macro",
@@ -75,14 +76,14 @@ rust_defaults {
     ],
     cfgs: [
         "span_locations",
-        "use_proc_macro",
         "wrap_proc_macro",
     ],
     rustlibs: [
         "libproc_macro2",
         "libquote",
-        "libunicode_xid",
+        "libunicode_ident",
     ],
+    proc_macros: ["librustversion"],
 }
 
 rust_test_host {
@@ -125,6 +126,15 @@ rust_test_host {
     name: "proc-macro2_test_tests_test_fmt",
     defaults: ["proc-macro2_test_defaults"],
     srcs: ["tests/test_fmt.rs"],
+    test_options: {
+        unit_test: true,
+    },
+}
+
+rust_test_host {
+    name: "proc-macro2_test_tests_test_size",
+    defaults: ["proc-macro2_test_defaults"],
+    srcs: ["tests/test_size.rs"],
     test_options: {
         unit_test: true,
     },
