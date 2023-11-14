@@ -41,7 +41,7 @@ rust_library_host {
     name: "libproc_macro2",
     crate_name: "proc_macro2",
     cargo_env_compat: true,
-    cargo_pkg_version: "1.0.66",
+    cargo_pkg_version: "1.0.69",
     srcs: ["src/lib.rs"],
     edition: "2021",
     features: [
@@ -50,6 +50,7 @@ rust_library_host {
         "span-locations",
     ],
     cfgs: [
+        "proc_macro_span",
         "span_locations",
         "wrap_proc_macro",
     ],
@@ -57,15 +58,13 @@ rust_library_host {
         "libunicode_ident",
     ],
     compile_multilib: "first",
-    product_available: true,
-    vendor_available: true,
 }
 
 rust_defaults {
     name: "proc-macro2_test_defaults",
     crate_name: "proc_macro2",
     cargo_env_compat: true,
-    cargo_pkg_version: "1.0.66",
+    cargo_pkg_version: "1.0.69",
     test_suites: ["general-tests"],
     auto_gen_config: true,
     edition: "2021",
@@ -75,6 +74,7 @@ rust_defaults {
         "span-locations",
     ],
     cfgs: [
+        "proc_macro_span",
         "span_locations",
         "wrap_proc_macro",
     ],
