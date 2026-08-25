@@ -114,6 +114,7 @@
     clippy::unnecessary_wraps,
     clippy::unused_self,
     clippy::used_underscore_binding,
+    clippy::used_underscore_items,
     clippy::vec_init_then_push
 )]
 #![allow(unknown_lints, mismatched_lifetime_syntaxes)]
